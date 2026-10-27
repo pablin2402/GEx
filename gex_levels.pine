@@ -1,0 +1,44 @@
+//@version=5
+indicator("GEX Levels", overlay=true, max_lines_count=20, max_labels_count=20)
+
+codeIn = input.string("GLD:0,0,0|QQQ:0,0,0", "Código del día")
+gldSym = input.symbol("AMEX:GLD", "GLD")
+qqqSym = input.symbol("NASDAQ:QQQ", "QQQ")
+
+parseLevels(string code, string key) =>
+    float[] out = array.from(0.0, 0.0, 0.0)
+    for part in str.split(code, "|")
+        kv = str.split(part, ":")
+        if array.size(kv) == 2 and str.trim(array.get(kv, 0)) == key
+            vals = str.split(array.get(kv, 1), ",")
+            for i = 0 to math.min(array.size(vals), 3) - 1
+                array.set(out, i, nz(str.tonumber(array.get(vals, i))))
+    out
+
+t = syminfo.ticker
+isGold = str.contains(t, "XAU") or str.contains(t, "GC") or str.contains(t, "GOLD")
+isNq = str.contains(t, "NQ") or str.contains(t, "NAS") or str.contains(t, "US100") or str.contains(t, "NDX")
+key = isGold ? "GLD" : isNq ? "QQQ" : ""
+etf = request.security(isGold ? gldSym : qqqSym, timeframe.period, close)
+ratio = key != "" and etf > 0 ? close / etf : na
+lv = parseLevels(codeIn, key)
+
+var line[] ls = array.new<line>()
+var label[] lb = array.new<label>()
+
+drawLevel(float v, color c, string name, int st) =>
+    if v > 0 and not na(ratio)
+        p = v * ratio
+        array.push(ls, line.new(bar_index - 1, p, bar_index, p, extend=extend.both, color=c, width=2, style=st))
+        array.push(lb, label.new(bar_index + 5, p, name + " " + str.tostring(p, format.mintick), color=color.new(c, 85), textcolor=c, style=label.style_label_left, size=size.small))
+
+if barstate.islast
+    for l in ls
+        line.delete(l)
+    for l in lb
+        label.delete(l)
+    array.clear(ls)
+    array.clear(lb)
+    drawLevel(array.get(lv, 0), color.yellow, "Flip", line.style_dashed)
+    drawLevel(array.get(lv, 1), color.green, "Call Wall", line.style_solid)
+    drawLevel(array.get(lv, 2), color.red, "Put Wall", line.style_solid)
